@@ -25,6 +25,68 @@
 #include "battery.h"
 #include "step-chg-jeita.h"
 #include "storm-watch.h"
+<<<<<<< HEAD
+=======
+#include <linux/pmic-voter.h>
+
+/* david.liu@bsp, 20160926 Add dash charging */
+#include <linux/power/oem_external_fg.h>
+#include <linux/gpio.h>
+#include <linux/delay.h>
+#include <linux/input/qpnp-power-on.h>
+#include <linux/spmi.h>
+#if defined(CONFIG_FB)
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#endif /*CONFIG_FB*/
+
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastchg.h>
+#endif
+
+#define SOC_INVALID                   0x7E
+#define SOC_DATA_REG_0                0x88D
+#define HEARTBEAT_INTERVAL_MS         6000
+#define CHG_TIMEOUT_COUNT             10 * 10 * 60 /* 10hr */
+#define CHG_SOFT_OVP_MV               5800
+#define BATT_SOFT_OVP_MV              4500
+#define CHG_SOFT_UVP_MV               4300
+#define CHG_VOLTAGE_NORMAL            5000
+#define BATT_REMOVE_TEMP              -400
+#define BATT_TEMP_HYST                20
+
+struct smb_charger *g_chg;
+struct qpnp_pon *pm_pon;
+
+static struct external_battery_gauge *fast_charger = NULL;
+static int op_charging_en(struct smb_charger *chg, bool en);
+bool op_set_fast_chg_allow(struct smb_charger *chg, bool enable);
+bool get_prop_fast_chg_started(struct smb_charger *chg);
+static bool set_prop_fast_switch_to_normal_false(struct smb_charger *chg);
+
+extern void mcu_en_gpio_set(int value);
+extern void usb_sw_gpio_set(int value);
+extern void set_mcu_en_gpio_value(int value);
+static void op_battery_temp_region_set(struct smb_charger *chg,
+		temp_region_type batt_temp_region);
+static void set_usb_switch(struct smb_charger *chg, bool enable);
+static void op_handle_usb_removal(struct smb_charger *chg);
+static bool get_prop_fast_switch_to_normal(struct smb_charger *chg);
+static int get_prop_batt_temp(struct smb_charger *chg);
+static int get_prop_batt_capacity(struct smb_charger *chg);
+static int get_prop_batt_current_now(struct smb_charger *chg);
+static int get_prop_batt_voltage_now(struct smb_charger *chg);
+static int set_property_on_fg(struct smb_charger *chg,
+		enum power_supply_property prop, int val);
+static int set_dash_charger_present(int status);
+static temp_region_type
+		op_battery_temp_region_get(struct smb_charger *chg);
+static int get_prop_fg_capacity(struct smb_charger *chg);
+static int get_prop_fg_current_now(struct smb_charger *chg);
+static int get_prop_fg_voltage_now(struct smb_charger *chg);
+static void op_check_charger_collapse(struct smb_charger *chg);
+static int op_set_collapse_fet(struct smb_charger *chg, bool on);
+>>>>>>> 49761aa... drivers: misc: implement usb fast charge mode
 
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
@@ -815,6 +877,13 @@ static int set_sdp_current(struct smb_charger *chg, int icl_ua)
 	int rc;
 	u8 icl_options;
 	const struct apsd_result *apsd_result = smblib_get_apsd_result(chg);
+
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	if (force_fast_charge > 0 && icl_ua == USBIN_500MA)
+	{
+		icl_ua = USBIN_900MA;
+	}
+#endif
 
 	/* power source is SDP */
 	switch (icl_ua) {
