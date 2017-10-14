@@ -386,6 +386,7 @@ CONFIG_PCI_LABEL=y
 #
 # Kernel Features
 #
+CONFIG_IOSCHED_MAPLE=y
 
 #
 # ARM errata workarounds via the alternatives framework
